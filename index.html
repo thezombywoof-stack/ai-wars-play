@@ -97,6 +97,13 @@
   #rules b{color:var(--text);}
   .doomflash{animation:flash 1s infinite alternate;}
   @keyframes flash{from{box-shadow:0 0 0 rgba(217,79,79,0);}to{box-shadow:0 0 25px rgba(217,79,79,.8);}}
+  .tour-highlight{outline:3px solid var(--builder); outline-offset:3px; border-radius:10px;}
+  #tourBox{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#232c40; border:1px solid #3d4d75;
+    border-radius:12px; padding:14px 18px; max-width:460px; z-index:60; box-shadow:0 8px 30px rgba(0,0,0,.6); display:none; font-size:13px;}
+  #tourBox .t-title{font-weight:700; margin-bottom:4px; color:var(--builder);}
+  #tourBox .t-btns{display:flex; gap:8px; margin-top:10px; justify-content:flex-end;}
+  .galchip{cursor:pointer;}
+  .galchip.on{border-color:var(--builder); color:var(--builder);}
 </style>
 </head>
 <body>
@@ -109,6 +116,8 @@
   <button class="primary" onclick="newRound()">▶ New Round (slide river)</button>
   <button onclick="doomCheck()">☠ Run Doom Check</button>
   <button onclick="toggleRules()">? Rules</button>
+  <button onclick="toggleGallery()">🃏 All Cards</button>
+  <button onclick="startTour()">👋 Tour</button>
   <button id="netBtn" onclick="toggleNet()">🌐 Online</button>
   <button onclick="if(confirm('Restart and reshuffle?'))init()">↻ New Game</button>
 </div>
@@ -133,12 +142,12 @@
 
 <div class="layout">
 <div>
-  <div class="panel">
+  <div class="panel" id="tracksPanel">
     <h2>World Tracks</h2>
     <div class="tracks" id="tracks"></div>
   </div>
 
-  <div class="panel">
+  <div class="panel" id="riverPanel">
     <h2>The River <span style="float:right;color:var(--dim);font-size:10px">deck: <span id="deckCount"></span> · discard: <span id="discCount"></span></span></h2>
     <div class="river" id="river"></div>
   </div>
@@ -147,15 +156,22 @@
 </div>
 
 <div>
-  <div class="panel">
+  <div class="panel" id="winsPanel">
     <h2>Paths to Victory</h2>
     <div id="wins"></div>
   </div>
-  <div class="panel">
+  <div class="panel" id="logPanel">
     <h2>Log</h2>
     <div id="log"></div>
   </div>
 </div>
+</div>
+
+<div class="panel" id="galleryPanel" style="display:none">
+  <h2>All 108 Cards <button class="tiny" style="float:right" onclick="toggleGallery()">✕ close</button></h2>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px" id="galFilters"></div>
+  <input id="galSearch" placeholder="search cards…" oninput="renderGallery()" style="background:var(--panel2);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:5px 10px;width:240px;margin-bottom:10px">
+  <div class="cardgrid" id="galGrid" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))"></div>
 </div>
 
 <div id="banner" onclick="this.style.display='none'"></div>
@@ -472,7 +488,73 @@ function wireConn(){
 function broadcast(){ if(net.conn&&net.conn.open&&!net.applying) net.conn.send({type:"state",state:S}); }
 const _render=render; render=function(){ _render(); broadcast(); };
 
+/* ============ CARD GALLERY — browse all 108 ============ */
+const GAL_TYPES=[["all","All"],["leader","Leaders"],["power","World Powers"],["model","Models"],["asset","Assets"],["event","Events"],["guardrail","Guardrails"],["builder","Builder Agendas"],["steward","Steward Agendas"]];
+let galFilter="all";
+function toggleGallery(){
+  const g=document.getElementById("galleryPanel");
+  const show=g.style.display!=="block";
+  g.style.display=show?"block":"none";
+  if(show){ renderGalFilters(); renderGallery(); g.scrollIntoView({behavior:"smooth"}); }
+}
+function renderGalFilters(){
+  document.getElementById("galFilters").innerHTML=GAL_TYPES.map(([k,label])=>{
+    const n=k==="all"?CARDS.length:CARDS.filter(c=>c.type===k||c.deck===k).length;
+    return `<button class="tiny galchip ${galFilter===k?"on":""}" onclick="galFilter='${k}';renderGalFilters();renderGallery()">${label} (${n})</button>`;
+  }).join("");
+}
+function renderGallery(){
+  const q=(document.getElementById("galSearch").value||"").toLowerCase();
+  const list=CARDS.filter(c=>{
+    if(galFilter!=="all"&&!(c.type===galFilter||c.deck===galFilter)) return false;
+    if(q&&!(c.name+" "+c.text+" "+(c.flavor||"")+" "+(c.tuck||"")).toLowerCase().includes(q)) return false;
+    return true;
+  });
+  document.getElementById("galGrid").innerHTML=list.map(c=>{
+    const tuck=c.tuck?`<div style="font-size:10px;color:#a07be0;border-top:1px dashed var(--line);padding-top:3px;margin-top:2px">⤵ tucked: ${c.tuck}</div>`:"";
+    return `<div>${cardHTML(c,tuck,costStr(c))}</div>`;
+  }).join("");
+}
+
+/* ============ GUIDED TOUR ============ */
+const TOUR=[
+ {el:null, title:"Welcome to AI WARS", txt:"A 2-player game about saving the world from rogue AI. One of you builds an aligned superintelligence; the other tames AI forever. This is the digital playtest table — 60 seconds and you'll know your way around."},
+ {el:"#tracksPanel", title:"The four world tracks", txt:"Capability = how strong AI is. Alignment = how well we steer it. Trust = public confidence. DOOM = the rogue AI's progress — at 10, you BOTH lose. Use −/+ to move markers as cards instruct."},
+ {el:"#riverPanel", title:"The river", txt:"Five face-up cards to buy. Each round they slide right and get cheaper (rightmost slots are −1 and −2). Click → Builder or → Steward to buy one. Events happen instantly; everything else joins your play area."},
+ {el:"#players", title:"Your side of the table", txt:"Resources (⚡ compute, 🗳 influence), your secret Agenda deck (Draw, then click a face-down card to peek — only YOUR screen shows it), and your cards in play. The ⤵ tuck button slides a card UNDER another for permanent combo bonuses."},
+ {el:"#winsPanel", title:"Paths to victory", txt:"Five ways the game can end — the dots light up live when a condition is met. Builder wins by Aligned AGI or Model Supremacy; Steward by Global Accord or Containment. Doom 10 = everyone loses."},
+ {el:"#logPanel", title:"The log", txt:"Everything that happens is recorded here — great for 'wait, what just happened?' moments."},
+ {el:"#netBtn", title:"Play online", txt:"Click 🌐 Online → Create room, and send the invite link it copies. Your opponent clicks it and you're playing — live-synced, no downloads. And 🃏 All Cards lets you browse every one of the 108 unique cards. Have fun — and report what's broken!"},
+];
+let tourI=-1;
+function startTour(){tourI=0; showTourStep();}
+function endTour(){document.querySelectorAll(".tour-highlight").forEach(e=>e.classList.remove("tour-highlight")); document.getElementById("tourBox").style.display="none"; tourI=-1;}
+function showTourStep(){
+  document.querySelectorAll(".tour-highlight").forEach(e=>e.classList.remove("tour-highlight"));
+  if(tourI<0||tourI>=TOUR.length){endTour(); return;}
+  const s=TOUR[tourI];
+  if(s.el){const e=document.querySelector(s.el); if(e){e.classList.add("tour-highlight"); e.scrollIntoView({behavior:"smooth",block:"center"});}}
+  else window.scrollTo({top:0,behavior:"smooth"});
+  let box=document.getElementById("tourBox");
+  if(!box){box=document.createElement("div"); box.id="tourBox"; document.body.appendChild(box);}
+  box.style.display="block";
+  box.innerHTML=`<div class="t-title">${s.title} <span style="color:var(--dim);font-weight:400;font-size:11px">(${tourI+1}/${TOUR.length})</span></div>
+    <div>${s.txt}</div>
+    <div class="t-btns">
+      ${tourI>0?'<button class="tiny" onclick="tourI--;showTourStep()">← Back</button>':""}
+      <button class="tiny" onclick="endTour()">Skip</button>
+      <button class="tiny primary" onclick="tourI++;showTourStep()">${tourI===TOUR.length-1?"Done ✓":"Next →"}</button>
+    </div>`;
+}
+
 init();
+
+// first-visit nudge (skipped when arriving via an invite link)
+if(!location.hash){
+  banner(`<b>New here?</b> Take the 60-second tour of the table.<br>
+    <button class="tiny primary" style="margin-top:6px" onclick="startTour()">👋 Start tour</button>
+    <span style="color:#8b95a7;font-size:11px"> — or click anywhere to dismiss</span>`);
+}
 
 // invite-link auto-join: opening the page with #AIWARS-XXXX joins that room immediately
 if(/^#aiwars-/i.test(location.hash)){
