@@ -357,6 +357,7 @@ function cardHTML(card,btns,extra=""){
     ${card.who?`<div style="font-style:italic;font-size:10px;color:#8fa0b8;line-height:1.3">${card.who}</div>`:""}
     ${stats.length?`<div class="cstats">${stats.join(" · ")}</div>`:""}
     ${card.text?`<div class="ctext">${card.text}</div>`:""}
+    ${card.tuck?`<div style="font-size:10px;color:#a07be0;border-top:1px dashed var(--line);padding-top:3px;margin-top:2px">⤵ tuck: ${card.tuck}</div>`:""}
     <div class="cflavor">${card.flavor||""}</div>
     <div class="cbtns">${btns}</div>
   </div>`;
@@ -511,10 +512,7 @@ function renderGallery(){
     if(q&&!(c.name+" "+c.text+" "+(c.flavor||"")+" "+(c.tuck||"")).toLowerCase().includes(q)) return false;
     return true;
   });
-  document.getElementById("galGrid").innerHTML=list.map(c=>{
-    const tuck=c.tuck?`<div style="font-size:10px;color:#a07be0;border-top:1px dashed var(--line);padding-top:3px;margin-top:2px">⤵ tucked: ${c.tuck}</div>`:"";
-    return `<div>${cardHTML(c,tuck,costStr(c))}</div>`;
-  }).join("");
+  document.getElementById("galGrid").innerHTML=list.map(c=>`<div>${cardHTML(c,"",costStr(c))}</div>`).join("");
 }
 
 /* ============ GUIDED TOUR ============ */
